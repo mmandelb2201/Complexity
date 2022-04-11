@@ -35,7 +35,7 @@ function FunctionBuilder()
 	// The number of parameters for functions
 	this.ParameterCount  = 0,
 	// Number of if statements/loops + 1
-	this.SimpleCyclomaticComplexity = 0;
+	this.SimpleCyclomaticComplexity = 1;
 	// The max depth of scopes (nested ifs, loops, etc)
 	this.MaxNestingDepth    = 0;
 	// The max number of conditions if one decision statement.
@@ -110,24 +110,66 @@ function complexity(filePath)
 	var fileBuilder = new FileBuilder();
 	fileBuilder.FileName = filePath;
 	fileBuilder.ImportCount = 0;
+	fileBuilder.Strings = 0;
 	builders[filePath] = fileBuilder;
+
 
 	// Tranverse program with a function visitor.
 	traverseWithParents(ast, function (node) 
-	{
-		if (node.type === 'FunctionDeclaration') 
-		{
-			var builder = new FunctionBuilder();
+	{	
+		//If node is a Literal, it is counted in the Strings counter
+		if (node.type === 'Literal') {
+			fileBuilder.Strings++;
+		}
 
+		if (node.type === 'FunctionDeclaration') {
+			var builder = new FunctionBuilder();
 			builder.FunctionName = functionName(node);
+			//node.params.length is the parameter count, set builder.ParameterCount to be equal to that
+			builder.ParameterCount = node.params.length;
 			builder.StartLine    = node.loc.start.line;
 
+			var conditionNum = [];
+			//To find max conditions, runs through each node. If a condition is found, it is added
+			//to the counter. 
+			traverseWithParents(node, function (node) {
+				var increase = 0;
+				if (isDecision(node)) {
+					builder.SimpleCyclomaticComplexity++;
+					if (isDecision(node)) {
+						traverseWithParents(node, function (node) {
+							//checks if a condition exists in the node
+							if (node.type === "LogicalExpression" && (node.operator === "&&" || node.operator === "||")){
+								increase++;
+							}
+						})
+						conditionNum.push(increase);
+					}
+					if (conditionNum.length > 0) {
+						builder.MaxConditions = Math.max(...conditionNum);
+					}
+				}
+			})
 			builders[builder.FunctionName] = builder;
+
+			var max = 0;
+			//Traverses through each node, finds children length of each. 
+			//If current children lenght is greater than the current max, 
+			//Max becomes that length
+			traverseWithParents(node, function(node){
+				var temp = childrenLength(node);
+				if(temp > max){
+					max = temp;
+				}
+			})
+			builder.MaxNestingDepth = max;
 		}
 
 	});
 
 }
+
+
 
 // Helper function for counting children of node.
 function childrenLength(node)
